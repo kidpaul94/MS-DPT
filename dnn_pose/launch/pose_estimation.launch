@@ -1,0 +1,4 @@
+<launch>
+  <node name="SubPub" pkg="dnn_pose" type="pose_estimation.py"/>
+  <node name="hsr_odom2obj" pkg="dnn_pose" type="base2object.py"/>
+</launch>
