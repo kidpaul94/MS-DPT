@@ -1,4 +1,4 @@
-# DNN - ICP
+# DNN_POSE
   Object 6d pose estimation using an RGB-D camera.
 
   Project under [Barton Research Group](https://brg.engin.umich.edu/), via [Multidisciplinary-Design-Program (MDP)](https://mdp.engin.umich.edu/)
