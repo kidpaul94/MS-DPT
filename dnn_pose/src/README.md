@@ -15,5 +15,3 @@
   _Addition_
 
   **pose_estimation.py** is added to peform the object 6d pose estimation.
-
-  **base2object.py** is added to transform the robot odometry to the object odometry. 
