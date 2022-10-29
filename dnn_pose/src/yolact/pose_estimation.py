@@ -366,7 +366,7 @@ class ImageFeed(object):
             (trans, rot) = self._tf_sub.lookupTransform('base_link', 'head_rgbd_sensor_link', rospy.Time(0))
             rgb_data = CvBridge().imgmsg_to_cv2(rgb, "rgb8")
             depth_data = CvBridge().imgmsg_to_cv2(depth, "16UC1")
-            num_obj, mask = self._evalimage(self._net, rgb_data)
+            num_obj, mask = self._evalimage(rgb_data)
 
             pose = PoseWithCovarianceStamped()
             translation = []
