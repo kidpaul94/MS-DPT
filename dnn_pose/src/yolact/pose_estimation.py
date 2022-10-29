@@ -33,10 +33,7 @@ from collections import defaultdict
 import cv2
 
 # Camera intrinsic values
-fx = 535.2639891915636
-fy = 536.0244886780657
-px = 317.4524529077298
-py = 241.5520765202342
+fx, fy, px, py = 535.2639891915636, 536.0244886780657, 317.4524529077298, 241.5520765202342
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description='YOLACT COCO Evaluation')
@@ -78,7 +75,7 @@ def parse_args(argv=None):
 
 color_cache = defaultdict(lambda: {})
 
-# Visualization functions 
+# YOLACT++
 def get_color(j, on_gpu=None):
     global color_cache
     color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
@@ -140,37 +137,14 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
 
         img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
     
-    return num_dets_to_consider, masks.detach().cpu().numpy() 
-
-def axis_visualizer(image, mask, RT, stamp):
-    try:
-        solutions = np.argwhere(mask[0] != 0)
-        mean_x = int(np.mean(solutions[:,1]))
-        mean_y = int(np.mean(solutions[:,0]))
-        mean = (mean_x, mean_y)
-
-        axis = np.int16([[40,0,0], [0,40,0], [0,0,40]])
-        projection = np.dot(RT[:3,:3], axis)[:2,:3]
-        projection[0,:3] = projection[0,:3] + mean_x
-        projection[1,:3] = projection[1,:3] + mean_y
-        projection = projection.astype(int)
-
-        # project 3D points to image plane
-        image = cv2.line(image, mean, tuple(projection[:2,0].ravel()), (0,0,255), 2)
-        image = cv2.line(image, mean, tuple(projection[:2,1].ravel()), (0,255,0), 2)
-        image = cv2.line(image, mean, tuple(projection[:2,2].ravel()), (255,0,0), 2)
-
-        return image
-
-    except Exception:
-        pass
+    return num_dets_to_consider, masks.detach().cpu().numpy()
 
 # ROS subscriber class for rgb and depth image from the HSR. Use message_filter to synchronize 2 subscribers.
 class ImageFeed(object):
-    def __init__(self, net, target, obb1, max_dist, rotationax1, target_vertice):     
+    def __init__(self, net, target, obb, max_dist, rotax, target_vertice):     
         self._net = net
-        self._obb, self._target, self._maxd = obb1, target, max_dist
-        self._rotax, self._vertice = rotationax1, target_vertice
+        self._obb, self._target, self._maxd = obb, target, max_dist
+        self._rotax, self._vertice = rotax, target_vertice
         self._score, self._prevT, self._prevp, self._prevq = 0, np.identity(4), np.zeros(3), np.zeros(4)
         self._pose_pub = rospy.Publisher('/pose_chatter', PoseWithCovarianceStamped, queue_size=10)
         self._num_pub = rospy.Publisher('/num_chatter', PointStamped, queue_size=10)
@@ -209,8 +183,8 @@ class ImageFeed(object):
 
         # Conversion from pixel location of the object in the depth image to camera frame coordinate
         pts = np.zeros((3,solutions_filtered.shape[0]))
-        pts[0] = (solutions_filtered[:,1] - px)/fx * opening[solutions_filtered[:,0],solutions_filtered[:,1]]
-        pts[1] = (solutions_filtered[:,0] - py)/fy * opening[solutions_filtered[:,0],solutions_filtered[:,1]] 
+        pts[0] = (solutions_filtered[:,1] - px) / fx * opening[solutions_filtered[:,0],solutions_filtered[:,1]]
+        pts[1] = (solutions_filtered[:,0] - py) / fy * opening[solutions_filtered[:,0],solutions_filtered[:,1]] 
         pts[2] = opening[solutions_filtered[:,0],solutions_filtered[:,1]]
 
         # Delete 0 depth
@@ -219,13 +193,12 @@ class ImageFeed(object):
 
         # Object position in camera coordinate
         num_total = pts_filtered.shape[1] 
-        Tx = np.sum(pts_filtered[0])/num_total 
-        Ty = np.sum(pts_filtered[1])/num_total
-        Tz = np.sum(pts_filtered[2])/num_total
+        Tx = np.sum(pts_filtered[0]) / num_total 
+        Ty = np.sum(pts_filtered[1]) / num_total
+        Tz = np.sum(pts_filtered[2]) / num_total
 
         # Write .ply file
         source.points = o3d.utility.Vector3dVector(pts_filtered.T)
-
         pts_source = np.asarray(source.points)
         zero_mean_source = pts_source - pts_source.mean(axis=0, keepdims=True)
         source_norm = zero_mean_source / self.maxd
@@ -259,6 +232,8 @@ class ImageFeed(object):
 
             else:
                 print("Intial rotation estimation starts!\n")
+
+                '''Multi-processing'''
                 ROT = [0]*6
                 ROT[0] = np.eye(3)
                 ROT[1] = Rotation.from_rotvec(np.pi / 6 * self._vertice).as_matrix()
@@ -282,7 +257,7 @@ class ImageFeed(object):
                 init_trans = np.eye(4)
 
                 if volume_ratio < 0.5:
-                    print("Insufficient data to process 6D pose! Volue ratio = 0.5")
+                    print("Insufficient data to process 6D pose! Volume ratio = 0.5")
                     mean_normal1 = np.asarray(source_1.normals).mean(0)
                     init_trans[:3,:3] = rotation_matrix(mean_normal1, self._vertice)
                     init_trans[:3,3] = -0.5 * self._vertice
@@ -300,6 +275,7 @@ class ImageFeed(object):
                 mean_normal1 = arm_length * mean_normal1
                 mean_normal2 = arm_length * np.asarray(source_2.normals).mean(0)
 
+                '''Multi-processing'''
                 ICP1 = [0]*6
                 TRANS1 = [0]*6
                 ICP1[0], TRANS1[0] = registration_result(source_1, self._target, mean_normal1, ROT[0])
@@ -351,6 +327,7 @@ class ImageFeed(object):
 
         tick = np.zeros((num_target, 1))
 
+        '''Multi-processing'''
         for i in range(num_source):
             pcd.points[num_target] = pts_source[i]
             target_tree = o3d.geometry.KDTreeFlann(pcd)
@@ -361,6 +338,29 @@ class ImageFeed(object):
 
         return score
 
+    def _visualizer(self, image, mask, RT, stamp):
+        try:
+            solutions = np.argwhere(mask[0] != 0)
+            mean_x = int(np.mean(solutions[:,1]))
+            mean_y = int(np.mean(solutions[:,0]))
+            mean = (mean_x, mean_y)
+
+            axis = np.int16([[40,0,0], [0,40,0], [0,0,40]])
+            projection = np.dot(RT[:3,:3], axis)[:2,:3]
+            projection[0,:3] = projection[0,:3] + mean_x
+            projection[1,:3] = projection[1,:3] + mean_y
+            projection = projection.astype(int)
+
+            # project 3D points to image plane
+            image = cv2.line(image, mean, tuple(projection[:2,0].ravel()), (0,0,255), 2)
+            image = cv2.line(image, mean, tuple(projection[:2,1].ravel()), (0,255,0), 2)
+            image = cv2.line(image, mean, tuple(projection[:2,2].ravel()), (255,0,0), 2)
+
+            return image
+
+        except Exception:
+            pass
+
     def _callback(self, rgb, depth):
         try:
             (trans, rot) = self._tf_sub.lookupTransform('base_link', 'head_rgbd_sensor_link', rospy.Time(0))
@@ -369,8 +369,7 @@ class ImageFeed(object):
             num_obj, mask = self._evalimage(rgb_data)
 
             pose = PoseWithCovarianceStamped()
-            translation = []
-            quat = []
+            translation, quat = [], []
             if num_obj > 0:
                 source_pc, Tx, Ty, Tz, obb2 = self._Depth2PC(mask, rgb_data, depth_data)
                 RT_xyz = self._RotEst(source_pc, obb2)
@@ -499,11 +498,11 @@ def gen_dict(path='./CAD_ply/MDP_TrainingModel.ply'):
     target.normals = save_normal
 
     # Calculate OBB and its vertices
-    obb1 = target.get_oriented_bounding_box()
-    edge_target = np.asarray(obb1.get_box_points())
-    rotationax1, target_vertice = get_vertice(edge_target)
+    obb = target.get_oriented_bounding_box()
+    edge_target = np.asarray(obb.get_box_points())
+    rotax, target_vertice = get_vertice(edge_target)
 
-    return target, obb1, max_dist, rotationax1, target_vertice
+    return target, obb, max_dist, rotax, target_vertice
 
 # YOLACT++ & ROS node initialization
 def evaluate_ros(net):
@@ -512,11 +511,11 @@ def evaluate_ros(net):
     cfg.mask_proto_debug = args.mask_proto_debug
 
     # Generate object dictionaries
-    target, obb1, max_dist, rotationax1, target_vertice = gen_dict()
+    target, obb, max_dist, rotax, target_vertice = gen_dict()
 
     # Target point cloud from CAD
     rospy.init_node('SubePub', anonymous=True)
-    ImageFeed(net, target, obb1, max_dist, rotationax1, target_vertice) 
+    ImageFeed(net, target, obb, max_dist, rotax, target_vertice) 
     rospy.spin()
 
 # YOLACT++ :3,3
