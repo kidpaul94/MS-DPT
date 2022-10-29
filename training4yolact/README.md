@@ -25,7 +25,7 @@
 ![alt text](<./google-colab.png>) 
 
  Google Colab is a notebook that provides free GPU computation. You can mount Google Colab with your Google Drive to store and train the DNN. 
- **Google_colab.py** contains the list of commands you need to fun to proceed either transfer learning or fine tuning.  
+ **Google_colab.py** contains the list of commands you need to proceed for either transfer learning or fine tuning.  
 
  _How to use_
  
