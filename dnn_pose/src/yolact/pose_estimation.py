@@ -4,7 +4,6 @@
 from cv_bridge.core import CvBridgeError
 from cv_bridge import CvBridge
 import rospy
-import tf
 from sensor_msgs.msg import Image as ROS_Image
 from geometry_msgs.msg import PoseWithCovarianceStamped, PointStamped
 import message_filters
@@ -145,12 +144,10 @@ class ImageFeed(object):
         self._net = net
         self._obb, self._target, self._maxd = obb, target, max_dist
         self._rotax, self._vertice = rotax, target_vertice
-        self._score, self._prevT, self._prevp, self._prevq = 0, np.identity(4), np.zeros(3), np.zeros(4)
+        self._score, self._prevT, self._prevpq = 0, np.identity(4), []
         self._pose_pub = rospy.Publisher('/pose_chatter', PoseWithCovarianceStamped, queue_size=10)
-        self._num_pub = rospy.Publisher('/num_chatter', PointStamped, queue_size=10)
 
         # Synchronize RGB and depth images subscription
-        self._tf_sub = tf.TransformListener()
         rgb_sub = message_filters.Subscriber('/hsrb/head_rgbd_sensor/rgb/image_rect_color', ROS_Image)
         depth_sub = message_filters.Subscriber('/hsrb/head_rgbd_sensor/depth_registered/image_rect_raw', ROS_Image)
         ts = message_filters.ApproximateTimeSynchronizer([rgb_sub, depth_sub], 5, 0.2)
@@ -165,57 +162,58 @@ class ImageFeed(object):
 
     # Depth image to point cloud using the mask from YOLACT++
     def _Depth2PC(self, mask, img, depth_map):
-        # Depth2PC only takes a single object (i.e., mask[0])
-        source, Tx, Ty, Tz, obb2 = o3d.geometry.PointCloud(), 0, 0, 0, 0
-        solutions = np.argwhere(mask[i] != 0)
-
-        # Edge Detection
-        gradient = cv2.morphologyEx(img, cv2.MORPH_GRADIENT, np.ones((2,2),np.uint8))
-        im_bw = cv2.cvtColor(gradient, cv2.COLOR_RGB2GRAY)
-
-        seg = im_bw[solutions[:,0], solutions[:,1]]
-        idx1 = np.argwhere(seg[...] > 40)
-        solutions_filtered = np.delete(solutions, idx1[:,0], axis = 0)
-
-        # Depth image from HSR in 16UC1 format (unit of the raw value = mm)
-        kernel = np.ones((5,5),np.uint8)
-        opening = cv2.morphologyEx(depth_map, cv2.MORPH_OPEN, kernel)
-
-        # Conversion from pixel location of the object in the depth image to camera frame coordinate
-        pts = np.zeros((3,solutions_filtered.shape[0]))
-        pts[0] = (solutions_filtered[:,1] - px) / fx * opening[solutions_filtered[:,0],solutions_filtered[:,1]]
-        pts[1] = (solutions_filtered[:,0] - py) / fy * opening[solutions_filtered[:,0],solutions_filtered[:,1]] 
-        pts[2] = opening[solutions_filtered[:,0],solutions_filtered[:,1]]
-
-        # Delete 0 depth
-        idx2 = np.argwhere(np.any(pts[...,:] == 0, axis = 0))
-        pts_filtered = np.delete(pts, idx2, axis = 1)
-
-        # Object position in camera coordinate
-        num_total = pts_filtered.shape[1] 
-        Tx = np.sum(pts_filtered[0]) / num_total 
-        Ty = np.sum(pts_filtered[1]) / num_total
-        Tz = np.sum(pts_filtered[2]) / num_total
-
-        # Write .ply file
-        source.points = o3d.utility.Vector3dVector(pts_filtered.T)
-        pts_source = np.asarray(source.points)
-        zero_mean_source = pts_source - pts_source.mean(axis=0, keepdims=True)
-        source_norm = zero_mean_source / self.maxd
-        source.points = o3d.utility.Vector3dVector(source_norm)
-
-        # Downsample with a voxel size and Remove outlier in observed pc 
-        source = source.voxel_down_sample(voxel_size=0.06)
-        source, _ = source.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
-
         try:
+            # Depth2PC only takes a single object (i.e., mask[0])
+            source = o3d.geometry.PointCloud()
+            solutions = np.argwhere(mask[0] != 0)
+
+            # Edge Detection
+            gradient = cv2.morphologyEx(img, cv2.MORPH_GRADIENT, np.ones((2,2),np.uint8))
+            im_bw = cv2.cvtColor(gradient, cv2.COLOR_RGB2GRAY)
+
+            seg = im_bw[solutions[:,0], solutions[:,1]]
+            idx1 = np.argwhere(seg[...] > 40)
+            solutions_filtered = np.delete(solutions, idx1[:,0], axis = 0)
+
+            # Depth image from HSR in 16UC1 format (unit of the raw value = mm)
+            kernel = np.ones((5,5),np.uint8)
+            opening = cv2.morphologyEx(depth_map, cv2.MORPH_OPEN, kernel)
+
+            # Conversion from pixel location of the object in the depth image to camera frame coordinate
+            pts = np.zeros((3,solutions_filtered.shape[0]))
+            pts[0] = (solutions_filtered[:,1] - px) / fx * opening[solutions_filtered[:,0],solutions_filtered[:,1]]
+            pts[1] = (solutions_filtered[:,0] - py) / fy * opening[solutions_filtered[:,0],solutions_filtered[:,1]] 
+            pts[2] = opening[solutions_filtered[:,0],solutions_filtered[:,1]]
+
+            # Delete 0 depth
+            idx2 = np.argwhere(np.any(pts[...,:] == 0, axis = 0))
+            pts_filtered = np.delete(pts, idx2, axis = 1)
+
+            # Object position in camera coordinate
+            num_total = pts_filtered.shape[1] 
+            Tx = np.sum(pts_filtered[0]) / num_total 
+            Ty = np.sum(pts_filtered[1]) / num_total
+            Tz = np.sum(pts_filtered[2]) / num_total
+
+            # Write point cloud
+            pts_source = pts_filtered.T
+            source.points = o3d.utility.Vector3dVector(pts_source)
+            zero_mean_source = pts_source - pts_source.mean(axis=0, keepdims=True)
+            source_norm = zero_mean_source / self.maxd
+            source.points = o3d.utility.Vector3dVector(source_norm)
+
+            # Downsample with a voxel size and Remove outlier in observed pc 
+            source = source.voxel_down_sample(voxel_size=0.06)
+            source, _ = source.remove_statistical_outlier(nb_neighbors=200, std_ratio=2.0)
+
             obb2 = source.get_oriented_bounding_box()
             source.translate(self._obb.get_center() - obb2.get_center())
             obb2.translate(self._obb.get_center() - obb2.get_center())
+        
+            return source, Tx, Ty, Tz, obb2
+
         except Exception:
             pass
-            
-        return source, Tx, Ty, Tz, obb2
 
     # OBB-based initialization with ICP (OBB: Oriented Bounding Box)
     def _RotEst(self, source, obb2):
@@ -278,21 +276,21 @@ class ImageFeed(object):
                 '''Multi-processing'''
                 ICP1 = [0]*6
                 TRANS1 = [0]*6
-                ICP1[0], TRANS1[0] = registration_result(source_1, self._target, mean_normal1, ROT[0])
-                ICP1[1], TRANS1[1] = registration_result(source_1, self._target, mean_normal1, ROT[1])
-                ICP1[2], TRANS1[2] = registration_result(source_1, self._target, mean_normal1, ROT[2])
-                ICP1[3], TRANS1[3] = registration_result(source_1, self._target, mean_normal1, ROT[3])
-                ICP1[4], TRANS1[4] = registration_result(source_1, self._target, mean_normal1, ROT[4])
-                ICP1[5], TRANS1[5] = registration_result(source_1, self._target, mean_normal1, ROT[5])
+                ICP1[0], TRANS1[0] = _refinement(source_1, mean_normal1, ROT[0])
+                ICP1[1], TRANS1[1] = _refinement(source_1, mean_normal1, ROT[1])
+                ICP1[2], TRANS1[2] = _refinement(source_1, mean_normal1, ROT[2])
+                ICP1[3], TRANS1[3] = _refinement(source_1, mean_normal1, ROT[3])
+                ICP1[4], TRANS1[4] = _refinement(source_1, mean_normal1, ROT[4])
+                ICP1[5], TRANS1[5] = _refinement(source_1, mean_normal1, ROT[5])
 
                 ICP2 = [0]*6
                 TRANS2 = [0]*6
-                ICP2[0], TRANS2[0] = registration_result(source_2, self._target, mean_normal2, ROT[0])
-                ICP2[1], TRANS2[1] = registration_result(source_2, self._target, mean_normal2, ROT[1])
-                ICP2[2], TRANS2[2] = registration_result(source_2, self._target, mean_normal2, ROT[2])
-                ICP2[3], TRANS2[3] = registration_result(source_2, self._target, mean_normal2, ROT[3])
-                ICP2[4], TRANS2[4] = registration_result(source_2, self._target, mean_normal2, ROT[4])
-                ICP2[5], TRANS2[5] = registration_result(source_2, self._target, mean_normal2, ROT[5])
+                ICP2[0], TRANS2[0] = _refinement(source_2, mean_normal2, ROT[0])
+                ICP2[1], TRANS2[1] = _refinement(source_2, mean_normal2, ROT[1])
+                ICP2[2], TRANS2[2] = _refinement(source_2, mean_normal2, ROT[2])
+                ICP2[3], TRANS2[3] = _refinement(source_2, mean_normal2, ROT[3])
+                ICP2[4], TRANS2[4] = _refinement(source_2, mean_normal2, ROT[4])
+                ICP2[5], TRANS2[5] = _refinement(source_2, mean_normal2, ROT[5])
 
                 RMSE1 = [ICP1[0].inlier_rmse, ICP1[1].inlier_rmse, ICP1[2].inlier_rmse, ICP1[3].inlier_rmse, ICP1[4].inlier_rmse, ICP1[5].inlier_rmse] 
                 min_rmse1 = np.argmin(RMSE1)
@@ -312,6 +310,17 @@ class ImageFeed(object):
 
         except Exception:
             pass
+
+    # Display registration result (between source and target)
+    def _refinement(self, source, arm, rotation):
+        source_temp = copy.deepcopy(source)
+        trans = np.dot(rotation, arm)
+        source_temp.transform(Rt2T(rotation, trans))
+        source_temp.translate(trans)
+        result = o3d.pipelines.registration.registration_icp(source_temp, self._target, 0.5, np.eye(4),
+            o3d.pipelines.registration.TransformationEstimationPointToPlane())
+
+        return result, trans
 
     # Evaluation whether registration is valid
     def _isvalidT(self, source):
@@ -363,13 +372,12 @@ class ImageFeed(object):
 
     def _callback(self, rgb, depth):
         try:
-            (trans, rot) = self._tf_sub.lookupTransform('base_link', 'head_rgbd_sensor_link', rospy.Time(0))
             rgb_data = CvBridge().imgmsg_to_cv2(rgb, "rgb8")
             depth_data = CvBridge().imgmsg_to_cv2(depth, "16UC1")
             num_obj, mask = self._evalimage(rgb_data)
 
             pose = PoseWithCovarianceStamped()
-            translation, quat = [], []
+            translation, quat, cov_t, cov_r = [], [], 1, 1
             if num_obj > 0:
                 source_pc, Tx, Ty, Tz, obb2 = self._Depth2PC(mask, rgb_data, depth_data)
                 RT_xyz = self._RotEst(source_pc, obb2)
@@ -380,49 +388,20 @@ class ImageFeed(object):
                 RT_zyx[:3,:3] = np.transpose(RT_zyx[:3,:3])
                 RT_zyx[:3,3] = (RT_zyx[:3,3] * self._maxd + [Tx, Ty, Tz]) / 1000
 
-                # Perform axis transformation with given data
-                quad_tf = np.array(rot)
-                mat_tf = tf.transformations.quaternion_matrix(quad_tf)
-                mat_tf[:3,3] = trans
-                mat_tf = np.ndarray.round(mat_tf, 4)
-
-                base_obj = np.matmul(mat_tf, RT_zyx) # switching the order maybe?
-                base_obj = np.ndarray.round(base_obj, 4)
-                translation = [base_obj[0,3], base_obj[1,3], base_obj[2,3]]
-                quat = Rotation.from_matrix(base_obj[:3,:3]).as_quat()
+                translation = [RT_zyx[0,3], RT_zyx[1,3], RT_zyx[2,3]]
+                quat = Rotation.from_matrix(RT_zyx[:3,:3]).as_quat()
 
                 self._prevT = RT_xyz
-                self._prevp = [base_obj[0,3], base_obj[1,3], base_obj[2,3]]
-                self._prevq = quat
+                self._prevpq = [RT_zyx[:3,3], quat]          
                 
-                # Assign small covariance
                 cov_t = 0.027 / self._score
                 cov_r = 0.001240 / self._score**6
-                pose.pose.covariance = [cov_t, 0.0, 0.0, 0.0, 0.0, 0.0, 
-                                        0.0, cov_t, 0.0, 0.0, 0.0, 0.0, 
-                                        0.0, 0.0, cov_t, 0.0, 0.0, 0.0, 
-                                        0.0, 0.0, 0.0, cov_r, 0.0, 0.0, 
-                                        0.0, 0.0, 0.0, 0.0, cov_r, 0.0, 
-                                        0.0, 0.0, 0.0, 0.0, 0.0, cov_r]
-                    
+  
             else:
                 rospy.loginfo('No detected object(s)!\n')
-                translation = self._prevp 
-                quat = self._prevq
+                translation = self._prevpq[0] 
+                quat = self._prevpq[1]
                 self._score = 0
-
-                # Inflate the covariance since we are guessing blindly
-                pose.pose.covariance = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-                                        0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 
-                                        0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 
-                                        0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 
-                                        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 
-                                        0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-
-            # Save data for next iteration
-            change_num = PointStamped()
-            change_num.point.x = num_obj
-            change_num.point.y = self._score
 
             # Assign variables for publishing
             pose.pose.pose.position.x = translation[0]
@@ -433,14 +412,19 @@ class ImageFeed(object):
             pose.pose.pose.orientation.z = quat[2]
             pose.pose.pose.orientation.w = quat[3]
 
-            pose.header.frame_id = 'base_link'
+            # Assign covariance matrix (Inflate diagonal entires if no object is detected)
+            pose.pose.covariance = [cov_t, 0.0, 0.0, 0.0, 0.0, 0.0, 
+                                    0.0, cov_t, 0.0, 0.0, 0.0, 0.0, 
+                                    0.0, 0.0, cov_t, 0.0, 0.0, 0.0, 
+                                    0.0, 0.0, 0.0, cov_r, 0.0, 0.0, 
+                                    0.0, 0.0, 0.0, 0.0, cov_r, 0.0, 
+                                    0.0, 0.0, 0.0, 0.0, 0.0, cov_r]
+
+            pose.header.frame_id = 'camera_link'
             pose.header.stamp = rgb.header.stamp
-            change_num.header.frame_id = 'base_link'
-            change_num.header.stamp = rgb.header.stamp
-            self._num_pub.publish(change_num)
             self._pose_pub.publish(pose)
 
-        except (CvBridgeError, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+        except (CvBridgeError) as e:
             print(e)   
 
 # Rotation matrix construction
@@ -453,17 +437,6 @@ def rotation_matrix(a, b):
     R = np.eye(3) + vx + np.dot(vx, vx)/(1+c)
 
     return R
-
-# Display registration result (between source and target)
-def registration_result(source, target, arm, rotation):
-    source_temp = copy.deepcopy(source)
-    trans = np.dot(rotation, arm)
-    source_temp.transform(Rt2T(rotation, trans))
-    source_temp.translate(trans)
-    result = o3d.pipelines.registration.registration_icp(source_temp, target, 0.5, np.eye(4),
-        o3d.pipelines.registration.TransformationEstimationPointToPlane())
-
-    return result, trans
 
 # OBB veritice calculation
 def get_vertice(edges):
