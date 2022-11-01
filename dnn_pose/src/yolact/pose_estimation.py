@@ -138,6 +138,30 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     
     return num_dets_to_consider, masks.detach().cpu().numpy()
 
+# Visualize object pose on RGB images
+def visualizer(image, mask, RT, stamp):
+    try:
+        solutions = np.argwhere(mask[0] != 0)
+        mean_x = int(np.mean(solutions[:,1]))
+        mean_y = int(np.mean(solutions[:,0]))
+        mean = (mean_x, mean_y)
+
+        axis = np.int16([[40,0,0], [0,40,0], [0,0,40]])
+        projection = np.dot(RT[:3,:3], axis)[:2,:3]
+        projection[0,:3] = projection[0,:3] + mean_x
+        projection[1,:3] = projection[1,:3] + mean_y
+        projection = projection.astype(int)
+
+        # project 3D points to image plane
+        image = cv2.line(image, mean, tuple(projection[:2,0].ravel()), (0,0,255), 2)
+        image = cv2.line(image, mean, tuple(projection[:2,1].ravel()), (0,255,0), 2)
+        image = cv2.line(image, mean, tuple(projection[:2,2].ravel()), (255,0,0), 2)
+
+        return image
+
+    except Exception:
+        pass
+
 # ROS subscriber class for rgb and depth image from the HSR. Use message_filter to synchronize 2 subscribers.
 class ImageFeed(object):
     def __init__(self, net, target, obb, max_dist, rotax, target_vertice):     
@@ -231,14 +255,10 @@ class ImageFeed(object):
             else:
                 print("Intial rotation estimation starts!\n")
 
-                '''Multi-processing'''
-                ROT = [0]*6
-                ROT[0] = np.eye(3)
-                ROT[1] = Rotation.from_rotvec(np.pi / 6 * self._vertice).as_matrix()
-                ROT[2] = Rotation.from_rotvec(np.pi / 3 * self._vertice).as_matrix()
-                ROT[3] = Rotation.from_rotvec(np.pi / 2 * self._vertice).as_matrix()
-                ROT[4] = Rotation.from_rotvec(2 * np.pi / 3 * self._vertice).as_matrix()
-                ROT[5] = Rotation.from_rotvec(5 * np.pi / 6 * self._vertice).as_matrix()
+                ROT = [np.eye(3)]
+                for k in range(1,6):
+                    temp = Rotation.from_rotvec(np.pi * i * self._vertice / 6).as_matrix()
+                    ROT.append(temp)
                 trans_comb = np.eye(4)
                 
                 # Actual algorithm
@@ -273,24 +293,13 @@ class ImageFeed(object):
                 mean_normal1 = arm_length * mean_normal1
                 mean_normal2 = arm_length * np.asarray(source_2.normals).mean(0)
 
-                '''Multi-processing'''
-                ICP1 = [0]*6
-                TRANS1 = [0]*6
-                ICP1[0], TRANS1[0] = _refinement(source_1, mean_normal1, ROT[0])
-                ICP1[1], TRANS1[1] = _refinement(source_1, mean_normal1, ROT[1])
-                ICP1[2], TRANS1[2] = _refinement(source_1, mean_normal1, ROT[2])
-                ICP1[3], TRANS1[3] = _refinement(source_1, mean_normal1, ROT[3])
-                ICP1[4], TRANS1[4] = _refinement(source_1, mean_normal1, ROT[4])
-                ICP1[5], TRANS1[5] = _refinement(source_1, mean_normal1, ROT[5])
+                '''Multi-processing causes deadlock'''
+                ICP1 = ICP2 = [0]*6
+                TRANS1 = TRANS2 = [0]*6
 
-                ICP2 = [0]*6
-                TRANS2 = [0]*6
-                ICP2[0], TRANS2[0] = _refinement(source_2, mean_normal2, ROT[0])
-                ICP2[1], TRANS2[1] = _refinement(source_2, mean_normal2, ROT[1])
-                ICP2[2], TRANS2[2] = _refinement(source_2, mean_normal2, ROT[2])
-                ICP2[3], TRANS2[3] = _refinement(source_2, mean_normal2, ROT[3])
-                ICP2[4], TRANS2[4] = _refinement(source_2, mean_normal2, ROT[4])
-                ICP2[5], TRANS2[5] = _refinement(source_2, mean_normal2, ROT[5])
+                for i in range(6):
+                    ICP1[i], TRANS1[i] = _refinement(source_1, mean_normal1, ROT[i])
+                    ICP2[i], TRANS2[i] = _refinement(source_2, mean_normal2, ROT[i])
 
                 RMSE1 = [ICP1[0].inlier_rmse, ICP1[1].inlier_rmse, ICP1[2].inlier_rmse, ICP1[3].inlier_rmse, ICP1[4].inlier_rmse, ICP1[5].inlier_rmse] 
                 min_rmse1 = np.argmin(RMSE1)
@@ -346,29 +355,6 @@ class ImageFeed(object):
         score = np.count_nonzero(tick) / num_source
 
         return score
-
-    def _visualizer(self, image, mask, RT, stamp):
-        try:
-            solutions = np.argwhere(mask[0] != 0)
-            mean_x = int(np.mean(solutions[:,1]))
-            mean_y = int(np.mean(solutions[:,0]))
-            mean = (mean_x, mean_y)
-
-            axis = np.int16([[40,0,0], [0,40,0], [0,0,40]])
-            projection = np.dot(RT[:3,:3], axis)[:2,:3]
-            projection[0,:3] = projection[0,:3] + mean_x
-            projection[1,:3] = projection[1,:3] + mean_y
-            projection = projection.astype(int)
-
-            # project 3D points to image plane
-            image = cv2.line(image, mean, tuple(projection[:2,0].ravel()), (0,0,255), 2)
-            image = cv2.line(image, mean, tuple(projection[:2,1].ravel()), (0,255,0), 2)
-            image = cv2.line(image, mean, tuple(projection[:2,2].ravel()), (255,0,0), 2)
-
-            return image
-
-        except Exception:
-            pass
 
     def _callback(self, rgb, depth):
         try:
