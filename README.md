@@ -8,5 +8,5 @@
   1) Run DNN_POSE for 6D pose estimation
 ```
 cd ./dnn_pose/src/yolact/
-python3 pose_estimation.py --trained_model=your_weights.pth --config=yolact_plus_resnet50_config --score_threshold=0.90
+rosrun pose_estimation.py --trained_model=your_weights.pth --config=yolact_plus_resnet50_config --score_threshold=0.90
 ```
