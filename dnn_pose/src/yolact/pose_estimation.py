@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # ROS & HSR
 from cv_bridge.core import CvBridgeError
@@ -75,22 +75,7 @@ def parse_args(argv=None):
 color_cache = defaultdict(lambda: {})
 
 # YOLACT++
-def get_color(j, on_gpu=None):
-    global color_cache
-    color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
-    
-    if on_gpu is not None and color_idx in color_cache[on_gpu]:
-        return color_cache[on_gpu][color_idx]
-    else:
-        color = COLORS[color_idx]
-        if not undo_transform:
-            color = (color[2], color[1], color[0])
-        if on_gpu is not None:
-            color = torch.Tensor(color).to(on_gpu).float() / 255.
-            color_cache[on_gpu][color_idx] = color
-        return color
-
-def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
+def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45):
     # If undo_transform=False then im_h and im_w are allowed to be None.
     if undo_transform:
         img_numpy = undo_image_transformation(img, w, h)
@@ -120,6 +105,21 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             num_dets_to_consider = j
             break
 
+    def get_color(j, on_gpu=None):
+        global color_cache
+        color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
+        
+        if on_gpu is not None and color_idx in color_cache[on_gpu]:
+            return color_cache[on_gpu][color_idx]
+        else:
+            color = COLORS[color_idx]
+            if not undo_transform:
+                color = (color[2], color[1], color[0])
+            if on_gpu is not None:
+                color = torch.Tensor(color).to(on_gpu).float() / 255.
+                color_cache[on_gpu][color_idx] = color
+            return color
+
     if args.display_masks and cfg.eval_mask_branch and num_dets_to_consider > 0:
         masks = masks[:num_dets_to_consider, :, :, None]
 
@@ -136,10 +136,10 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
 
         img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
     
-    return num_dets_to_consider, masks.detach().cpu().numpy()
+    return num_dets_to_consider, masks.detach().cpu().numpy() 
 
 # Visualize object pose on RGB images
-def visualizer(image, mask, RT, stamp):
+def vispose(image, mask, RT):
     try:
         solutions = np.argwhere(mask[0] != 0)
         mean_x = int(np.mean(solutions[:,1]))
@@ -247,7 +247,7 @@ class ImageFeed(object):
             if self._score > 0.54:
                 print("Warm starts!\n")
                 source_1.transform(self._prevT)
-                result = refine_registration(source_1, self._target, 1)
+                result = self._refinement(source_1, self._target, 1) # NEED MODIFICATION
                 trans_comb = np.matmul(result.transformation, self._prevT)
 
                 return trans_comb
@@ -256,8 +256,8 @@ class ImageFeed(object):
                 print("Intial rotation estimation starts!\n")
 
                 ROT = [np.eye(3)]
-                for k in range(1,6):
-                    temp = Rotation.from_rotvec(np.pi * i * self._vertice / 6).as_matrix()
+                for j in range(1,6):
+                    temp = Rotation.from_rotvec(np.pi * j * self._vertice / 6).as_matrix()
                     ROT.append(temp)
                 trans_comb = np.eye(4)
                 
@@ -267,9 +267,6 @@ class ImageFeed(object):
 
                 source_1.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=10, max_nn=30))
                 source_1.normalize_normals()
-                normal = np.asarray(source_1.normals)
-                is_single = np.dot(normal[1:], normal[0])
-                is_normal = np.argwhere(np.logical_and(is_single<=0.02, is_single>=-0.02))
                 volume_ratio = obb2.volume() / self._obb.volume()
                 arm_length = 0
                 init_trans = np.eye(4)
@@ -298,8 +295,8 @@ class ImageFeed(object):
                 TRANS1 = TRANS2 = [0]*6
 
                 for i in range(6):
-                    ICP1[i], TRANS1[i] = _refinement(source_1, mean_normal1, ROT[i])
-                    ICP2[i], TRANS2[i] = _refinement(source_2, mean_normal2, ROT[i])
+                    ICP1[i], TRANS1[i] = self._refinement(source_1, mean_normal1, ROT[i])
+                    ICP2[i], TRANS2[i] = self._refinement(source_2, mean_normal2, ROT[i])
 
                 RMSE1 = [ICP1[0].inlier_rmse, ICP1[1].inlier_rmse, ICP1[2].inlier_rmse, ICP1[3].inlier_rmse, ICP1[4].inlier_rmse, ICP1[5].inlier_rmse] 
                 min_rmse1 = np.argmin(RMSE1)
