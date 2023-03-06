@@ -12,7 +12,7 @@ Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via M
 
 - [Repository Structure](#repository-structure)
 - [Download Process](#download-process)
-- [Usages](#usages)
+- [How to Run](#how-to-run)
     - [DNNPOSE](#dnnpose)
     - [Sensor Fusion](#sensor-fusion)
 - [Citation](#citation)
@@ -37,7 +37,7 @@ Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via M
     catkin_make
     source devel/setup.bash
 
-## Usages
+## How to Run
 
 ### DNNPOSE:
 
