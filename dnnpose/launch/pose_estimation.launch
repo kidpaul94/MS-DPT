@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="trained_model", default="your_weights.pth"/>
+  <arg name="config", default="yolact_plus_resnet50_config"/>
+  <arg name="score_threshold", default="0.90"/>
+  <node pkg="dnnpose" type="estimation.py" name="estimation" output="screen" 
+        args="$(arg trained_model) $(arg config) $(arg score_threshold)"/>
+</launch>
