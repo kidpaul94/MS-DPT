@@ -21,6 +21,7 @@ Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via M
 ---
 
 ## Repository Structure
+
     ├── dnnpose
     │   ├── launch             # ROS launch file
     │   └── src
