@@ -51,6 +51,7 @@ Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via M
 </br>
 
 ## Citation
+
     @article{lee2022multi,
       title={Multi-sensor aided deep pose tracking},
       author={Lee, Hojun and Toner, Tyler and Tilbury, Dawn and Barton, Kira},
