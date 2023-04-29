@@ -4,7 +4,7 @@
 
 # DNNPOSE
 
-Online object 6D pose estimation for Human Support Robot([HSR](https://mag.toyota.co.uk/toyota-human-support-robot/)) from Toyota Research Institute.
+Online object 6D pose estimation for Human Support Robot([HSR](https://mag.toyota.co.uk/toyota-human-support-robot/)) from Toyota Research Institute. Original paper is available at [here](https://www.sciencedirect.com/science/article/pii/S2405896322028488).
 
 ![Example 0](./images/MS-DPT.png)
 
