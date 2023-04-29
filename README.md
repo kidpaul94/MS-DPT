@@ -1,8 +1,14 @@
+<p align="center">
+<img src=./images/logo.png width=40% height=40%>
+</p>
+
 # DNNPOSE
 
-Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via Multidisciplinary-Design-Program ([MDP](https://mdp.engin.umich.edu/)) at the University of Michigan. At the moment, the repositoy only provides a pipeline for ***6D pose estimation using an RGB-D image***. 
+Online object 6D pose estimation for Human Support Robot([HSR](https://mag.toyota.co.uk/toyota-human-support-robot/)) from Toyota Research Institute.
 
 ![Example 0](./images/MS-DPT.png)
+
+Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via Multidisciplinary-Design-Program ([MDP](https://mdp.engin.umich.edu/)) at the University of Michigan. The repository only provides a pipeline for ***6D pose estimation using an RGB-D image*** at the moment.
 
 <!-- <p align="center">
 <img src=./images/Log2.gif width=30% height=30%> <img src=./images/Log3.gif width=30% height=30%>
