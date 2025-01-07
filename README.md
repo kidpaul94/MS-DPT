@@ -77,6 +77,6 @@ Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via M
 
 ## ToDo Lists
 
-| **Refactorization** | ![Progress](https://progress-bar.dev/50) |
+| **Refactorization** | ![Progress](https://geps.dev/progress/50) |
 | --- | --- |
-| **Multi-sensor fusion** | ![Progress](https://progress-bar.dev/0) |
+| **Multi-sensor fusion** | ![Progress](https://geps.dev/progress/0) |
