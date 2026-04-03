@@ -3,17 +3,14 @@
 </p>
 
 # DNNPOSE
-![ROS](https://img.shields.io/badge/ros-%230A0FF9.svg?style=for-the-badge&logo=ros&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-Online object 6D pose estimation for Human Support Robot([HSR](https://mag.toyota.co.uk/toyota-human-support-robot/)) from Toyota Research Institute. Original paper is available at [here](https://www.sciencedirect.com/science/article/pii/S2405896322028488).
 
 ![Example 0](./images/MS-DPT.png)
 
-Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via Multidisciplinary-Design-Program ([MDP](https://mdp.engin.umich.edu/)) at the University of Michigan. The repository only provides a pipeline for ***6D pose estimation using an RGB-D image*** at the moment.
+Authors: [Hojun Lee](https://kidpaul94.github.io/), [Tyler Toner](https://twtoner.github.io), [Dawn Tilbury](https://websites.umich.edu/~tilbury/), [Kira Barton](https://me.engin.umich.edu/people/faculty/kira-barton/)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Online object 6D pose estimation for Human Support Robot([HSR](https://mag.toyota.co.uk/toyota-human-support-robot/)) from Toyota Research Institute. Original paper is available at [here](https://www.sciencedirect.com/science/article/pii/S2405896322028488). Project under Barton Research Group ([BRG](https://brg.engin.umich.edu/)), via Multidisciplinary-Design-Program ([MDP](https://mdp.engin.umich.edu/)) at the University of Michigan. The repository only provides a pipeline for ***6D pose estimation using an RGB-D image*** at the moment.
 
 <!-- <p align="center">
 <img src=./images/Log2.gif width=30% height=30%> <img src=./images/Log3.gif width=30% height=30%>
